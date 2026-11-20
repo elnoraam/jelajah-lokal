@@ -8,7 +8,7 @@ from .. import events
 from ..config import CATEGORIES
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
-from .common import can_see_unpublished, haversine_km, ok, page_of
+from .common import can_see_unpublished, haversine_km, ok, slice_of
 
 router = APIRouter(tags=["katalog-destinasi"])
 CAT_PATTERN = "^(" + "|".join(CATEGORIES) + ")$"
@@ -49,8 +49,8 @@ def search_destinations(
     radius_km: Optional[float] = Query(default=None, gt=0, le=500),
     status: Optional[str] = Query(default=None, pattern="^(menunggu|terbit|ditolak)$", description="Hanya berlaku untuk admin"),
     mine: bool = Query(default=False, description="true = kiriman saya (perlu login)"),
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=10, ge=1, le=50),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     user: Optional[User] = Depends(optional_user),
     conn=Depends(get_conn),
 ):
@@ -90,7 +90,7 @@ def search_destinations(
         items.append(r)
     if lat is not None:
         items.sort(key=lambda r: r["jarak_km"])
-    chunk, total = page_of([dest_out(r) for r in items], page, size)
+    chunk, total = slice_of([dest_out(r) for r in items], limit, offset)
     return ok(conn, chunk, total=total)
 
 

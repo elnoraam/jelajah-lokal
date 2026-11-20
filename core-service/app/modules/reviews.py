@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from .. import events
 from ..db import get_conn
 from ..security import User, current_user, require_roles
-from .common import get_published_destination, ok, page_of
+from .common import get_published_destination, ok, slice_of
 
 router = APIRouter(tags=["ulasan"])
 
@@ -30,12 +30,12 @@ def review_out(r, with_flags=False) -> dict:
 
 
 @router.get("/destinations/{destination_id}/reviews", summary="Daftar ulasan dan rata-rata rating")
-def list_reviews(destination_id: int, page: int = Query(default=1, ge=1), size: int = Query(default=10, ge=1, le=50),
+def list_reviews(destination_id: int, limit: int = Query(default=1, ge=1), offset: int = Query(default=0, ge=0),
                  conn=Depends(get_conn)):
     dest = get_published_destination(conn, destination_id)
     rows = conn.execute("SELECT * FROM reviews WHERE destination_id=? AND hidden=0 ORDER BY created_at DESC, id DESC",
                         (destination_id,)).fetchall()
-    chunk, total = page_of([review_out(r) for r in rows], page, size)
+    chunk, total = slice_of([review_out(r) for r in rows], limit, offset)
     resp = ok(conn, chunk, total=total)
     resp["meta"].update(rating_avg=dest["rating_avg"], review_count=dest["review_count"])
     return resp
@@ -63,10 +63,10 @@ def report_review(review_id: int, _: User = Depends(current_user), conn=Depends(
 
 
 @router.get("/reviews/reported", summary="Ulasan yang dilaporkan (admin)")
-def list_reported(page: int = Query(default=1, ge=1), size: int = Query(default=10, ge=1, le=50),
+def list_reported(limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
                   _: User = Depends(require_roles("admin")), conn=Depends(get_conn)):
     rows = conn.execute("SELECT * FROM reviews WHERE reported=1 ORDER BY id DESC").fetchall()
-    chunk, total = page_of([review_out(r, True) for r in rows], page, size)
+    chunk, total = slice_of([review_out(r, True) for r in rows], limit, offset)
     return ok(conn, chunk, total=total)
 
 

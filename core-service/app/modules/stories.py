@@ -9,7 +9,7 @@ from ..adapters.http import UpstreamError
 from ..adapters.wiki import get_background
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
-from .common import can_see_unpublished, get_published_destination, ok, page_of
+from .common import can_see_unpublished, get_published_destination, ok, slice_of
 
 router = APIRouter(tags=["cerita-budaya"])
 SUMMARY_CHARS = 280
@@ -48,14 +48,14 @@ def story_out(conn, row, mode: Optional[str] = None) -> dict:
 
 
 @router.get("/destinations/{destination_id}/stories", summary="Daftar cerita sebuah destinasi")
-def list_destination_stories(destination_id: int, page: int = Query(default=1, ge=1),
-                             size: int = Query(default=10, ge=1, le=50), conn=Depends(get_conn)):
+def list_destination_stories(destination_id: int, limit: int = Query(default=50, ge=1, le=200),
+                             offset: int = Query(default=0, ge=0), conn=Depends(get_conn)):
     get_published_destination(conn, destination_id)
     rows = conn.execute(
         """SELECT s.* FROM stories s JOIN story_destinations sd ON sd.story_id = s.id
            WHERE sd.destination_id=? AND s.status='terbit' ORDER BY s.created_at DESC, s.id DESC""",
         (destination_id,)).fetchall()
-    chunk, total = page_of([story_out(conn, r, "ringkas") for r in rows], page, size)
+    chunk, total = slice_of([story_out(conn, r, "ringkas") for r in rows], limit, offset)
     return ok(conn, chunk, total=total)
 
 
@@ -72,11 +72,11 @@ def destination_background(destination_id: int, conn=Depends(get_conn)):
 
 @router.get("/stories", summary="Daftar cerita (admin dapat memfilter status)")
 def list_stories(status: Optional[str] = Query(default=None, pattern="^(menunggu|terbit|ditolak)$"),
-                 page: int = Query(default=1, ge=1), size: int = Query(default=10, ge=1, le=50),
+                 limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0),
                  user: Optional[User] = Depends(optional_user), conn=Depends(get_conn)):
     st = status if (user and user.role == "admin" and status) else "terbit"
     rows = conn.execute("SELECT * FROM stories WHERE status=? ORDER BY created_at DESC, id DESC", (st,)).fetchall()
-    chunk, total = page_of([story_out(conn, r, "ringkas") for r in rows], page, size)
+    chunk, total = slice_of([story_out(conn, r, "ringkas") for r in rows], limit, offset)
     return ok(conn, chunk, total=total)
 
 

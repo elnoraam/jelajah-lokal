@@ -17,10 +17,9 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def page_of(items: list, page: int, size: int) -> tuple:
-    """Return (potongan_halaman, total)."""
-    start = (page - 1) * size
-    return items[start:start + size], len(items)
+def slice_of(items: list, limit: int, offset: int) -> tuple:
+    """Return (potongan, total) untuk paginasi limit/offset."""
+    return items[offset:offset + limit], len(items)
 
 
 def get_published_destination(conn, destination_id: int):
