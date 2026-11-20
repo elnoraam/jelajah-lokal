@@ -241,8 +241,8 @@ def test_background_wikipedia(client, monkeypatch):
         json={"title": "Curug Cimahi", "extract": "Air terjun di Bandung Barat.",
               "content_urls": {"desktop": {"page": "https://id.wikipedia.org/wiki/Curug_Cimahi"}}}))
     r = client.get(f"/destinations/{d['id']}/background")
-    assert r.status_code == 200 and data_of(r)["summary"].startswith("Air terjun")    assert client.get(f"/destinations/{nowiki['id']}/background").status_code == 404
-
+    assert r.status_code == 200 and data_of(r)["summary"].startswith("Air terjun")
+    assert client.get(f"/destinations/{nowiki['id']}/background").status_code == 404
 
 def test_feed_requires_api_key_and_hides_private_data(client):
     d = make_published(client, name="Sumber Uji Umpan")
