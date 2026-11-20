@@ -1,0 +1,45 @@
+# JelajahLokal: hanya microservice yang berjalan di STB (core, auth, gateway).
+# Jalankan:  cp .env.example .env  (isi nilainya)  lalu  docker compose up -d --build
+services:
+  core:
+    build: ./core-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CORE_DB_PATH: /data/core.db
+      AUTH_INTERNAL_URL: http://auth:8000
+    volumes:
+      - core-data:/data
+    mem_limit: 256m
+    cpus: 0.5
+    depends_on:
+      auth:
+        condition: service_healthy
+
+  auth:
+    build: ./auth-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AUTH_DB_PATH: /data/auth.db
+    volumes:
+      - auth-data:/data
+    mem_limit: 128m
+    cpus: 0.25
+
+  gateway:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8080}:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    mem_limit: 64m
+    cpus: 0.25
+    depends_on:
+      core:
+        condition: service_healthy
+
+volumes:
+  core-data:
+  auth-data:
