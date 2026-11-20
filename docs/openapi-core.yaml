@@ -16,7 +16,7 @@ info:
     jumlah pemanggilannya.
 
     '
-  version: 1.0.0
+  version: 2.0.0
 paths:
   /destinations:
     get:
@@ -42,7 +42,7 @@ paths:
         schema:
           anyOf:
           - type: string
-            pattern: ^(alam|budaya-sejarah|kuliner-lokal|desa-wisata|kerajinan)$
+            pattern: ^(nature|culture_history|local_culinary|tourism_village|craft)$
           - type: 'null'
           title: Category
       - name: hidden
@@ -75,23 +75,23 @@ paths:
             minimum: -180
           - type: 'null'
           title: Lon
-      - name: radius_km
+      - name: radius_m
         in: query
         required: false
         schema:
           anyOf:
           - type: number
-            maximum: 500
+            maximum: 500000
             exclusiveMinimum: 0
           - type: 'null'
-          title: Radius Km
+          title: Radius M
       - name: status
         in: query
         required: false
         schema:
           anyOf:
           - type: string
-            pattern: ^(menunggu|terbit|ditolak)$
+            pattern: ^(waiting|published|rejected)$
           - type: 'null'
           description: Hanya berlaku untuk admin
           title: Status
@@ -105,23 +105,23 @@ paths:
           default: false
           title: Mine
         description: true = kiriman saya (perlu login)
-      - name: page
+      - name: limit
         in: query
         required: false
         schema:
           type: integer
+          maximum: 200
           minimum: 1
-          default: 1
-          title: Page
-      - name: size
+          default: 50
+          title: Limit
+      - name: offset
         in: query
         required: false
         schema:
           type: integer
-          maximum: 50
-          minimum: 1
-          default: 10
-          title: Size
+          minimum: 0
+          default: 0
+          title: Offset
       - name: authorization
         in: header
         required: false
@@ -145,7 +145,7 @@ paths:
     post:
       tags:
       - katalog-destinasi
-      summary: Kirim destinasi baru (kontributor)
+      summary: Kirim destinasi baru (contributor)
       operationId: create_destination_destinations_post
       parameters:
       - name: authorization
@@ -259,23 +259,23 @@ paths:
         schema:
           type: integer
           title: Destination Id
-      - name: page
+      - name: limit
         in: query
         required: false
         schema:
           type: integer
+          maximum: 200
           minimum: 1
-          default: 1
-          title: Page
-      - name: size
+          default: 50
+          title: Limit
+      - name: offset
         in: query
         required: false
         schema:
           type: integer
-          maximum: 50
-          minimum: 1
-          default: 10
-          title: Size
+          minimum: 0
+          default: 0
+          title: Offset
       responses:
         '200':
           description: Successful Response
@@ -326,26 +326,26 @@ paths:
         schema:
           anyOf:
           - type: string
-            pattern: ^(menunggu|terbit|ditolak)$
+            pattern: ^(waiting|published|rejected)$
           - type: 'null'
           title: Status
-      - name: page
+      - name: limit
         in: query
         required: false
         schema:
           type: integer
+          maximum: 200
           minimum: 1
-          default: 1
-          title: Page
-      - name: size
+          default: 50
+          title: Limit
+      - name: offset
         in: query
         required: false
         schema:
           type: integer
-          maximum: 50
-          minimum: 1
-          default: 10
-          title: Size
+          minimum: 0
+          default: 0
+          title: Offset
       - name: authorization
         in: header
         required: false
@@ -369,7 +369,7 @@ paths:
     post:
       tags:
       - cerita-budaya
-      summary: Kirim cerita budaya (kontributor)
+      summary: Kirim cerita budaya (contributor)
       operationId: create_story_stories_post
       parameters:
       - name: authorization
@@ -417,11 +417,11 @@ paths:
         schema:
           anyOf:
           - type: string
-            pattern: ^ringkas$
+            pattern: ^short$
           - type: 'null'
-          description: ringkas = hanya ringkasan
+          description: short = hanya kutipan singkat (excerpt)
           title: Mode
-        description: ringkas = hanya ringkasan
+        description: short = hanya kutipan singkat (excerpt)
       - name: authorization
         in: header
         required: false
@@ -494,23 +494,22 @@ paths:
         schema:
           type: integer
           title: Destination Id
-      - name: page
+      - name: limit
         in: query
         required: false
         schema:
           type: integer
           minimum: 1
           default: 1
-          title: Page
-      - name: size
+          title: Limit
+      - name: offset
         in: query
         required: false
         schema:
           type: integer
-          maximum: 50
-          minimum: 1
-          default: 10
-          title: Size
+          minimum: 0
+          default: 0
+          title: Offset
       responses:
         '200':
           description: Successful Response
@@ -601,23 +600,23 @@ paths:
       summary: Ulasan yang dilaporkan (admin)
       operationId: list_reported_reviews_reported_get
       parameters:
-      - name: page
+      - name: limit
         in: query
         required: false
         schema:
           type: integer
+          maximum: 200
           minimum: 1
-          default: 1
-          title: Page
-      - name: size
+          default: 50
+          title: Limit
+      - name: offset
         in: query
         required: false
         schema:
           type: integer
-          maximum: 50
-          minimum: 1
-          default: 10
-          title: Size
+          minimum: 0
+          default: 0
+          title: Offset
       - name: authorization
         in: header
         required: false
@@ -860,18 +859,10 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Waktu UTC 'YYYY-MM-DD HH:MM:SS'
+          description: ISO 8601 UTC, contoh 2026-11-20T10:00:00Z
           title: Updated Since
-        description: Waktu UTC 'YYYY-MM-DD HH:MM:SS'
-      - name: page
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-          default: 1
-          title: Page
-      - name: size
+        description: ISO 8601 UTC, contoh 2026-11-20T10:00:00Z
+      - name: limit
         in: query
         required: false
         schema:
@@ -879,7 +870,15 @@ paths:
           maximum: 200
           minimum: 1
           default: 50
-          title: Size
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
       - name: x-api-key
         in: header
         required: false
@@ -923,24 +922,25 @@ components:
           title: Name
         category:
           type: string
-          pattern: ^(alam|budaya-sejarah|kuliner-lokal|desa-wisata|kerajinan)$
+          pattern: ^(nature|culture_history|local_culinary|tourism_village|craft)$
           title: Category
-          description: alam | budaya-sejarah | kuliner-lokal | desa-wisata | kerajinan
+          description: nature | culture_history | local_culinary | tourism_village
+            | craft
         description:
           type: string
           maxLength: 4000
           minLength: 20
           title: Description
-        latitude:
+        lat:
           type: number
           maximum: 6.5
           minimum: -11.5
-          title: Latitude
-        longitude:
+          title: Lat
+        lon:
           type: number
           maximum: 141.5
           minimum: 94.0
-          title: Longitude
+          title: Lon
         address:
           anyOf:
           - type: string
@@ -971,8 +971,8 @@ components:
       - name
       - category
       - description
-      - latitude
-      - longitude
+      - lat
+      - lon
       title: DestinationIn
     HTTPValidationError:
       properties:
@@ -995,7 +995,7 @@ components:
     PlanIn:
       properties:
         destination_id:
-          type: integer
+          type: string
           title: Destination Id
         visit_date:
           type: string
@@ -1033,7 +1033,7 @@ components:
       properties:
         status:
           type: string
-          pattern: ^(terbit|ditolak)$
+          pattern: ^(published|rejected)$
           title: Status
         reason:
           anyOf:
@@ -1065,7 +1065,7 @@ components:
           title: Summary
         destination_ids:
           items:
-            type: integer
+            type: string
           type: array
           maxItems: 10
           minItems: 1

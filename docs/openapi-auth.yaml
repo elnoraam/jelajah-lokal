@@ -3,7 +3,7 @@ info:
   title: JelajahLokal Auth Service
   description: Login pengguna (JWT) dan pengelolaan API key. Semua path relatif terhadap
     /api/auth.
-  version: 1.0.0
+  version: 2.0.0
 paths:
   /health:
     get:
@@ -21,7 +21,7 @@ paths:
     post:
       tags:
       - akun
-      summary: Daftar akun wisatawan atau kontributor
+      summary: Daftar akun tourist atau contributor
       operationId: register_register_post
       requestBody:
         content:
@@ -237,9 +237,9 @@ components:
           title: Name
         role:
           type: string
-          pattern: ^(wisatawan|kontributor)$
+          pattern: ^(tourist|contributor)$
           title: Role
-          default: wisatawan
+          default: tourist
       type: object
       required:
       - email
