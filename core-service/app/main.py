@@ -4,6 +4,7 @@ Lima bounded context bisnis berjalan sebagai modul dalam satu proses dan saling
 berkomunikasi lewat domain event (lihat events.py dan handlers.py). Identitas &
 Akses berjalan di auth-service terpisah.
 """
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
@@ -12,10 +13,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import handlers
+from . import handlers, mock
 from .config import settings
 from .db import connect, get_conn, init_db
-from .modules import conditions, destinations, feed, plans, reviews, stories
+from .modules import conditions, destinations, feed, mock_api, plans, reviews, stories
 from .seed import seed_demo
 
 
@@ -27,7 +28,15 @@ async def lifespan(app: FastAPI):
         conn = connect()
         seed_demo(conn)
         conn.close()
+    task = None
+    if settings.mock_mode or settings.mock_upstream_smartcity:
+        conn = connect()
+        mock.start(conn)
+        conn.close()
+        task = asyncio.create_task(mock.run_forever())
     yield
+    if task:
+        task.cancel()
 
 
 DESCRIPTION = """
@@ -41,8 +50,8 @@ Layanan wisata tersembunyi dan cerita budaya. Semua path relatif terhadap `/api`
 
 app = FastAPI(title="JelajahLokal Core Service", version="1.0.0", description=DESCRIPTION, lifespan=lifespan)
 
-# Kode error "unauthorized" (401 token JWT) dan "conflict" (409)
-# ementara, menunggu persetujuan grup Smart City.
+# Kode error mengikuti "unauthorized" (401 token JWT) dan "conflict" (409)
+# sementara, menunggu persetujuan grup Smart City.
 STATUS_CODE = {403: "forbidden", 404: "not_found", 409: "conflict", 422: "validation_error",
                429: "rate_limited", 503: "upstream_unavailable"}
 
@@ -70,6 +79,8 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 for module in (destinations, stories, reviews, plans, conditions, feed):
     app.include_router(module.router)
+if settings.mock_mode:  # /_mock/* hanya ada saat MOCK_MODE=true, selain itu 404
+    app.include_router(mock_api.router)
 
 
 @app.get("/health", tags=["umum"], summary="Cek layanan hidup")

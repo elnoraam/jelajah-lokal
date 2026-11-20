@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .. import mock
 from ..config import settings
 
 MAX_CACHE_ENTRIES = 256
@@ -75,12 +76,28 @@ def cached_get_json(key: str, url: str, ttl: int, params: Optional[dict] = None,
     """Return (data, stale, diambil_pada_epoch). stale=True hanya jika data dari cache karena sumber gagal."""
     now = time.time()
     entry = _cache.get(key)
+    svc = service or urlparse(url).netloc
+    if mock.is_mocked(svc):
+        # Mock mode: respons dibangkitkan dalam format sumber aslinya, lalu diproses adapter seperti biasa.
+        # Cache tetap diisi agar gangguan acak memperlihatkan data basi (stale).
+        t0 = time.perf_counter()
+        try:
+            data = mock.get_world().respond(svc, url, params or {})
+        except mock.MockUpstreamDown:
+            log.info("xcall service=%s path=%s status=mock_down ms=0", svc, urlparse(url).path)
+            if entry:
+                return entry["data"], True, entry["at"]
+            raise UpstreamError(f"{svc} (mock) tidak tersedia")
+        log.info("xcall service=%s path=%s status=mock ms=%d", svc, urlparse(url).path,
+                 (time.perf_counter() - t0) * 1000)
+        _store(key, data, now + ttl, now)
+        return data, False, now
     if entry and entry["expires"] > now:
         return entry["data"], False, entry["at"]
     hdrs = {"User-Agent": settings.user_agent, "Accept": "application/json"}
     hdrs.update(headers or {})
     try:
-        data = _get(service or urlparse(url).netloc, url, params, hdrs)
+        data = _get(svc, url, params, hdrs)
     except (httpx.HTTPError, ValueError, UpstreamError) as exc:
         if entry:
             return entry["data"], True, entry["at"]
