@@ -9,7 +9,7 @@ from ..adapters.http import UpstreamError
 from ..adapters.wiki import get_background
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
-from .common import can_see_unpublished, get_published_destination, ok, slice_of
+from .common import can_see_unpublished, get_published_destination, ok, slice_of, to_iso_z
 
 router = APIRouter(tags=["cerita-budaya"])
 SUMMARY_CHARS = 280
@@ -36,11 +36,11 @@ def short_text(row) -> str:
 
 def story_out(conn, row, mode: Optional[str] = None) -> dict:
     out = {"id": row["id"], "title": row["title"], "status": row["status"], "author_id": row["author_id"],
-           "created_at": row["created_at"],
+           "created_at": to_iso_z(row["created_at"]),
            "destination_ids": [r["destination_id"] for r in conn.execute(
                "SELECT destination_id FROM story_destinations WHERE story_id=? ORDER BY destination_id", (row["id"],))]}
     if mode == "ringkas":
-        out["ringkasan"] = short_text(row)
+        out["excerpt"] = short_text(row)
     else:
         out["summary"] = row["summary"]
         out["body"] = row["body"]

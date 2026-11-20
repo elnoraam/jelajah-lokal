@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..db import get_conn
 from ..security import api_key_required
-from .common import ok
+from .common import ok, to_iso_z
 
 router = APIRouter(tags=["umpan-destinasi"])
 
@@ -18,11 +18,6 @@ CATEGORY_API = {
     "desa-wisata": "tourism_village",
     "kerajinan": "craft",
 }
-
-
-def _to_iso_z(sqlite_ts: str) -> str:
-    """'YYYY-MM-DD HH:MM:SS' (UTC dari SQLite) -> 'YYYY-MM-DDTHH:MM:SSZ'."""
-    return sqlite_ts.replace(" ", "T") + "Z"
 
 
 def _parse_since(value: str) -> str:
@@ -47,7 +42,7 @@ def feed(updated_since: Optional[str] = Query(default=None, description="ISO 860
         args.append(_parse_since(updated_since))
     rows = conn.execute(sql + " ORDER BY id", args).fetchall()
     data = [{"id": str(r["id"]), "name": r["name"], "category": CATEGORY_API.get(r["category"], r["category"]),
-             "lat": r["latitude"], "lon": r["longitude"], "updated_at": _to_iso_z(r["updated_at"])}
+             "lat": r["latitude"], "lon": r["longitude"], "updated_at": to_iso_z(r["updated_at"])}
             for r in rows[offset:offset + limit]]
     resp = ok(conn, data)
     resp["meta"]["total"] = len(rows)

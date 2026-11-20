@@ -8,7 +8,7 @@ from .. import events
 from ..config import CATEGORIES
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
-from .common import can_see_unpublished, haversine_km, ok, slice_of
+from .common import can_see_unpublished, haversine_km, ok, slice_of, to_iso_z
 
 router = APIRouter(tags=["katalog-destinasi"])
 CAT_PATTERN = "^(" + "|".join(CATEGORIES) + ")$"
@@ -18,8 +18,8 @@ class DestinationIn(BaseModel):
     name: str = Field(min_length=3, max_length=120)
     category: str = Field(pattern=CAT_PATTERN, description="alam | budaya-sejarah | kuliner-lokal | desa-wisata | kerajinan")
     description: str = Field(min_length=20, max_length=4000)
-    latitude: float = Field(ge=-11.5, le=6.5)
-    longitude: float = Field(ge=94.0, le=141.5)
+    lat: float = Field(ge=-11.5, le=6.5)
+    lon: float = Field(ge=94.0, le=141.5)
     address: Optional[str] = Field(default=None, max_length=250)
     opening_hours: Optional[str] = Field(default=None, max_length=120)
     photo_url: Optional[str] = Field(default=None, max_length=500, pattern="^https?://")
@@ -34,6 +34,8 @@ class StatusIn(BaseModel):
 def dest_out(r) -> dict:
     d = dict(r)
     d["hidden_gem"] = bool(d["hidden_gem"])
+    d["lat"], d["lon"] = d.pop("latitude"), d.pop("longitude")
+    d["created_at"], d["updated_at"] = to_iso_z(d["created_at"]), to_iso_z(d["updated_at"])
     d.pop("submitted_by", None)
     d.pop("reject_reason", None) if d["status"] != "ditolak" else None
     return d
@@ -46,7 +48,7 @@ def search_destinations(
     hidden: Optional[bool] = Query(default=None, description="true = hanya wisata tersembunyi"),
     lat: Optional[float] = Query(default=None, ge=-90, le=90),
     lon: Optional[float] = Query(default=None, ge=-180, le=180),
-    radius_km: Optional[float] = Query(default=None, gt=0, le=500),
+    radius_m: Optional[float] = Query(default=None, gt=0, le=500000),
     status: Optional[str] = Query(default=None, pattern="^(menunggu|terbit|ditolak)$", description="Hanya berlaku untuk admin"),
     mine: bool = Query(default=False, description="true = kiriman saya (perlu login)"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -56,8 +58,8 @@ def search_destinations(
 ):
     if (lat is None) != (lon is None):
         raise HTTPException(422, "lat dan lon harus diisi bersamaan")
-    if radius_km is not None and lat is None:
-        raise HTTPException(422, "radius_km memerlukan lat dan lon")
+    if radius_m is not None and lat is None:
+        raise HTTPException(422, "radius_m memerlukan lat dan lon")
     where, args = [], []
     if mine:
         if not user:
@@ -84,12 +86,12 @@ def search_destinations(
     items = []
     for r in rows:
         if lat is not None:
-            r["jarak_km"] = round(haversine_km(lat, lon, r["latitude"], r["longitude"]), 2)
-            if radius_km is not None and r["jarak_km"] > radius_km:
+            r["distance_m"] = round(haversine_km(lat, lon, r["latitude"], r["longitude"]) * 1000)
+            if radius_m is not None and r["distance_m"] > radius_m:
                 continue
         items.append(r)
     if lat is not None:
-        items.sort(key=lambda r: r["jarak_km"])
+        items.sort(key=lambda r: r["distance_m"])
     chunk, total = slice_of([dest_out(r) for r in items], limit, offset)
     return ok(conn, chunk, total=total)
 
@@ -109,7 +111,7 @@ def create_destination(body: DestinationIn, user: User = Depends(require_roles("
     cur = conn.execute(
         """INSERT INTO destinations(name,category,description,latitude,longitude,address,opening_hours,
            photo_url,wikipedia_title,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (body.name.strip(), body.category, body.description.strip(), body.latitude, body.longitude, body.address,
+        (body.name.strip(), body.category, body.description.strip(), body.lat, body.lon, body.address,
          body.opening_hours, body.photo_url, body.wikipedia_title, status, user.id))
     new_id = cur.lastrowid
     if status == "terbit":

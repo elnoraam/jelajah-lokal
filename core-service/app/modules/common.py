@@ -33,6 +33,11 @@ def can_see_unpublished(user: Optional[User], owner_id: int) -> bool:
     return bool(user and (user.role == "admin" or user.id == owner_id))
 
 
+def to_iso_z(sqlite_ts: str) -> str:
+    """'YYYY-MM-DD HH:MM:SS' (UTC dari SQLite) -> 'YYYY-MM-DDTHH:MM:SSZ'."""
+    return sqlite_ts.replace(" ", "T") + "Z"
+
+
 def now_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

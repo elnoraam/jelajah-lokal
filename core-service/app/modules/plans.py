@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from ..db import get_conn
 from ..security import User, current_user
-from .common import get_published_destination, ok
+from .common import get_published_destination, ok, to_iso_z
 
 router = APIRouter(tags=["rencana-kunjungan"])
 
@@ -20,7 +20,7 @@ class PlanIn(BaseModel):
 
 def plan_out(r) -> dict:
     return {"id": r["id"], "destination_id": r["destination_id"], "destination_name": r["name"],
-            "visit_date": r["visit_date"], "note": r["note"], "created_at": r["created_at"]}
+            "visit_date": r["visit_date"], "note": r["note"], "created_at": to_iso_z(r["created_at"])}
 
 
 @router.get("/plans", summary="Rencana kunjungan milik saya")

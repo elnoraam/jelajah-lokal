@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from .. import events
 from ..db import get_conn
 from ..security import User, current_user, require_roles
-from .common import get_published_destination, ok, slice_of
+from .common import get_published_destination, ok, slice_of, to_iso_z
 
 router = APIRouter(tags=["ulasan"])
 
@@ -23,7 +23,7 @@ class ModerationIn(BaseModel):
 
 def review_out(r, with_flags=False) -> dict:
     out = {"id": r["id"], "destination_id": r["destination_id"], "user_name": r["user_name"],
-           "rating": r["rating"], "comment": r["comment"], "created_at": r["created_at"]}
+           "rating": r["rating"], "comment": r["comment"], "created_at": to_iso_z(r["created_at"])}
     if with_flags:
         out.update(reported=bool(r["reported"]), hidden=bool(r["hidden"]))
     return out
