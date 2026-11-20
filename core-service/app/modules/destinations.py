@@ -138,4 +138,4 @@ def set_destination_status(destination_id: int, body: StatusIn, _: User = Depend
     if body.status == "published":
         events.publish("DestinasiTerbit", conn, destination_id=destination_id)
     conn.commit()
-    return dest_out(conn.execute("SELECT * FROM destinations WHERE id=?", (destination_id,)).fetchone())
+    return ok(conn, dest_out(conn.execute("SELECT * FROM destinations WHERE id=?", (destination_id,)).fetchone()))
