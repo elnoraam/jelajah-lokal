@@ -263,6 +263,7 @@ def test_admin_publishes_directly(client):
     r = client.post("/destinations", json={**DEST, "name": "Langsung Terbit Admin"}, headers=ADMIN)
     assert r.status_code == 201 and r.json()["status"] == "terbit" and r.json()["hidden_gem"] is True
 
+
 def test_meta_seq_increases_on_data_change(client, monkeypatch):
     d = make_published(client, name="Bukit Uji Seq")
     monkeypatch.setattr(httpx, "get", lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("mati")))
@@ -270,3 +271,40 @@ def test_meta_seq_increases_on_data_change(client, monkeypatch):
     assert client.get(f"/destinations/{d['id']}/conditions").json()["meta"]["seq"] == s1  # tanpa perubahan, seq tetap
     make_published(client, name="Bukit Uji Seq Dua")
     assert client.get(f"/destinations/{d['id']}/conditions").json()["meta"]["seq"] > s1
+
+
+def test_weather_from_kotasiaga_with_fallback(monkeypatch):
+    from app.adapters import weather
+    monkeypatch.setattr(settings, "weather_url", "https://kotasiaga.contoh/api/weather")
+    monkeypatch.setattr(settings, "weather_ttl", 0)
+    state = {"sc": "ok", "om": "ok"}
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(url)
+        req = httpx.Request("GET", url)
+        if "kotasiaga" in url:
+            if state["sc"] == "down":
+                raise httpx.ConnectError("mati")
+            return httpx.Response(200, request=req, json={
+                "data": {"temperature_c": 27.4, "rain_mm_h": 18.0, "condition": "heavy_rain"},
+                "meta": {"stale": False}})
+        if state["om"] == "down":
+            raise httpx.ConnectError("mati")
+        return httpx.Response(200, request=req, json={"current": {"temperature_2m": 21.5, "rain": 0.2, "weather_code": 61}})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    outbound.clear_cache()
+    w = weather.get_weather(-6.9, 107.6)
+    assert w["source"] == "kotasiaga" and w["temperature_c"] == 27.4 and w["rain_mm"] == 18.0
+    assert w["condition"] == "heavy_rain" and w["stale"] is False
+    state.update(sc="down", om="down")   # keduanya mati: data KotaSiaga lama dikembalikan sebagai stale
+    w = weather.get_weather(-6.9, 107.6)
+    assert w["source"] == "kotasiaga" and w["stale"] is True
+    state.update(sc="down", om="ok")     # hanya KotaSiaga mati: Open-Meteo segar dipakai
+    w = weather.get_weather(-6.9, 107.6)
+    assert w["source"] == "open-meteo" and w["stale"] is False and w["condition"] == "rain"
+    calls.clear()                        # dengan date, KotaSiaga tidak dipanggil
+    state.update(sc="ok", om="ok")
+    assert weather.get_weather(-6.9, 107.6, "2026-11-21")["source"] == "open-meteo"
+    assert not any("kotasiaga" in c for c in calls)

@@ -19,9 +19,13 @@ class Settings:
     route_ttl = int(os.getenv("ROUTE_TTL", "3600"))
     wiki_ttl = int(os.getenv("WIKI_TTL", "86400"))
     risk_ttl = int(os.getenv("RISK_TTL", "60"))
-    # Sumber status risiko wilayah (opsional). Kosong = fitur risiko menampilkan pesan.
-    risk_url = os.getenv("RISK_API_URL", "")
-    risk_key = os.getenv("RISK_API_KEY", "")
+    # Smart City (KotaSiaga). Kosong = cuaca dari Open-Meteo. Isi setelah API Registry terbit.
+    smartcity_url = os.getenv("SMARTCITY_API_URL", "").rstrip("/")
+    smartcity_key = os.getenv("SMARTCITY_API_KEY", "")
+    weather_url = (smartcity_url + "/weather") if smartcity_url else ""
+    # Opsional: RISK_API_URL dan RISK_API_KEY menimpa nilai turunan dari SMARTCITY_*
+    risk_url = os.getenv("RISK_API_URL", "") or ((smartcity_url + "/risk") if smartcity_url else "")
+    risk_key = os.getenv("RISK_API_KEY", "") or smartcity_key
     risk_key_header = os.getenv("RISK_API_KEY_HEADER", "X-API-Key")
     risk_lat_param = os.getenv("RISK_LAT_PARAM", "lat")
     risk_lon_param = os.getenv("RISK_LON_PARAM", "lon")
