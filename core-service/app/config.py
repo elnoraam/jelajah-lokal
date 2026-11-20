@@ -17,6 +17,7 @@ class Settings:
     mock_tick_seconds = min(60, max(2, int(os.getenv("MOCK_TICK_SECONDS", "5"))))
     mock_seed = int(os.environ["MOCK_SEED"]) if os.getenv("MOCK_SEED") else None
     smartcity_mocked = mock_mode or mock_upstream_smartcity
+    mock_admin_key = os.getenv("MOCK_ADMIN_API_KEY", "")
     # Smart City (KotaSiaga). Kosong = cuaca dari Open-Meteo. Isi setelah API Registry terbit.
     smartcity_url = os.getenv("SMARTCITY_API_URL", "").rstrip("/")
     smartcity_key = os.getenv("SMARTCITY_API_KEY", "")

@@ -65,7 +65,7 @@ def error_response(request: Request, status: int, code: str, message: str) -> JS
 @app.exception_handler(StarletteHTTPException)
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 401:
-        code = "invalid_api_key" if "/feed/" in request.url.path else "unauthorized"
+        code = "invalid_api_key" if ("/feed/" in request.url.path or "/_mock/" in request.url.path) else "unauthorized"
     else:
         code = STATUS_CODE.get(exc.status_code, "error")
     return error_response(request, exc.status_code, code, str(exc.detail))
