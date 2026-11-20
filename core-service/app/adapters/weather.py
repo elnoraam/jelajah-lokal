@@ -1,6 +1,6 @@
 """Adapter cuaca -> CuacaDestinasi.
 
-Cuaca saat ini diambil dari KotaSiaga (GET /weather, kontrak AGENTS.md bagian 4) bila
+Cuaca saat ini diambil dari KotaSiaga (GET /weather) bila
 SMARTCITY_API_URL diisi. Jika KotaSiaga mati atau datanya basi, Open-Meteo dipakai.
 Prakiraan per tanggal (parameter date) selalu dari Open-Meteo, karena KotaSiaga hanya
 menyediakan cuaca saat ini dan prakiraan 6 jam.

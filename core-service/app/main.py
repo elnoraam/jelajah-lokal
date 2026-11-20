@@ -41,8 +41,8 @@ Layanan wisata tersembunyi dan cerita budaya. Semua path relatif terhadap `/api`
 
 app = FastAPI(title="JelajahLokal Core Service", version="1.0.0", description=DESCRIPTION, lifespan=lifespan)
 
-# Kode error mengikuti AGENTS.md bagian 3. "unauthorized" (401 token JWT) dan "conflict" (409)
-# belum ada di AGENTS.md: sementara, menunggu persetujuan grup Smart City.
+# Kode error "unauthorized" (401 token JWT) dan "conflict" (409)
+# ementara, menunggu persetujuan grup Smart City.
 STATUS_CODE = {403: "forbidden", 404: "not_found", 409: "conflict", 422: "validation_error",
                429: "rate_limited", 503: "upstream_unavailable"}
 

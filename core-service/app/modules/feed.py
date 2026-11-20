@@ -10,7 +10,7 @@ from .common import ok
 
 router = APIRouter(tags=["umpan-destinasi"])
 
-# Nilai category untuk layanan lain memakai English (AGENTS.md bagian 3). Slug internal tetap Indonesia.
+# Nilai category untuk layanan lain memakai English. Slug internal tetap Indonesia.
 CATEGORY_API = {
     "alam": "nature",
     "budaya-sejarah": "culture_history",

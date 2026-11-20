@@ -1,4 +1,4 @@
-"""Penghitung seq: naik pada setiap perubahan data (AGENTS.md bagian 3 dan 7)."""
+"""Penghitung seq: naik pada setiap perubahan data."""
 
 
 def current_seq(conn) -> int:
