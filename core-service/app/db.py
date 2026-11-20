@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS plans (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_plans_user ON plans(user_id, visit_date);
+
+CREATE TABLE IF NOT EXISTS seq_counter (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  value INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO seq_counter(id, value) VALUES (1, 0);
 """
 
 

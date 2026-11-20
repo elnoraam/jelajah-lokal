@@ -9,7 +9,7 @@ from ..adapters.risk import get_risk
 from ..adapters.route import get_route
 from ..adapters.weather import get_weather
 from ..db import get_conn
-from .common import get_published_destination
+from .common import get_published_destination, ok
 
 router = APIRouter(tags=["kondisi-sekitar-destinasi"])
 
@@ -22,11 +22,14 @@ def conditions(destination_id: int,
     if date_ and not (date.today() <= date_ <= date.today() + timedelta(days=14)):
         raise HTTPException(422, "date harus antara hari ini dan 14 hari ke depan")
     try:
-        cuaca = get_weather(dest["latitude"], dest["longitude"], date_.isoformat() if date_ else None)
+        weather = get_weather(dest["latitude"], dest["longitude"], date_.isoformat() if date_ else None)
     except UpstreamError:
-        cuaca = {"keterangan": "Data cuaca tidak dapat diambil dan belum ada data tersimpan", "sumber": "open-meteo"}
-    risiko = get_risk(dest["latitude"], dest["longitude"])
-    return {"destination_id": destination_id, "destination_name": dest["name"], "cuaca": cuaca, "risiko": risiko}
+        weather = {"message": "Data cuaca tidak dapat diambil dan belum ada data tersimpan",
+                   "source": "open-meteo", "stale": False}
+    risk = get_risk(dest["latitude"], dest["longitude"])
+    stale = bool(weather.get("stale") or risk.get("stale"))
+    return ok(conn, {"destination_id": str(destination_id), "destination_name": dest["name"],
+                     "weather": weather, "risk": risk}, stale=stale)
 
 
 @router.get("/destinations/{destination_id}/route", summary="Rute mobil menuju destinasi")
@@ -39,4 +42,5 @@ def route(destination_id: int, from_lat: float = Query(ge=-90, le=90), from_lon:
         raise HTTPException(503, "Layanan rute tidak dapat dihubungi dan belum ada data tersimpan")
     except ValueError as exc:
         raise HTTPException(404, str(exc))
-    return {"destination_id": destination_id, "destination_name": dest["name"], **r}
+    return ok(conn, {"destination_id": str(destination_id), "destination_name": dest["name"], **r},
+              stale=r["stale"])

@@ -157,39 +157,48 @@ def test_conditions_with_fallback(client, monkeypatch):
     monkeypatch.setattr(settings, "weather_ttl", 0)  # paksa panggil ulang agar fallback teruji
     r = client.get(f"/destinations/{d['id']}/conditions")
     assert r.status_code == 200
-    body = r.json()
-    assert body["cuaca"]["suhu_c"] == 21.5 and body["cuaca"]["deskripsi"] == "Hujan ringan"
-    assert body["cuaca"]["dari_cache"] is False
-    assert body["risiko"]["tingkat"] is None and "belum dikonfigurasi" in body["risiko"]["keterangan"]
-    # sumber mati -> data terakhir dikembalikan dengan penanda dari_cache
+    body, meta = r.json()["data"], r.json()["meta"]
+    assert body["destination_id"] == str(d["id"])
+    assert body["weather"]["temperature_c"] == 21.5 and body["weather"]["description"] == "Hujan ringan"
+    assert body["weather"]["stale"] is False and meta["stale"] is False and meta["source"] == "live"
+    assert body["risk"]["risk_level"] is None and "belum tersedia" in body["risk"]["message"]
+    # sumber mati -> data terakhir dikembalikan dengan stale=true
     r2 = client.get(f"/destinations/{d['id']}/conditions").json()
-    assert r2["cuaca"]["suhu_c"] == 21.5 and r2["cuaca"]["dari_cache"] is True
-    assert client.get(f"/destinations/{d['id']}/conditions?date=2001-01-01").status_code == 422
+    assert r2["data"]["weather"]["temperature_c"] == 21.5 and r2["data"]["weather"]["stale"] is True
+    assert r2["meta"]["stale"] is True
+    bad = client.get(f"/destinations/{d['id']}/conditions?date=2001-01-01")
+    assert bad.status_code == 422 and bad.json()["error"]["code"] == "validation_error"
 
 
 def test_conditions_no_data_message(client, monkeypatch):
     d = make_published(client, name="Bukit Uji Tanpa Data")
     monkeypatch.setattr(httpx, "get", lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("mati")))
     r = client.get(f"/destinations/{d['id']}/conditions")
-    assert r.status_code == 200 and "tidak dapat diambil" in r.json()["cuaca"]["keterangan"]
+    assert r.status_code == 200 and "tidak dapat diambil" in r.json()["data"]["weather"]["message"]
 
 
-def test_risk_translation(monkeypatch):
-    assert risk.translate("RED") == "Bahaya" and risk.translate("kuning") == "Waspada"
-    assert risk.translate("hijau") == "Aman" and risk.translate("aneh") is None and risk.translate(None) is None
+def test_risk_adapter(monkeypatch):
     monkeypatch.setattr(settings, "risk_url", "https://sumber.contoh/risk")
-    monkeypatch.setattr(settings, "risk_level_field", "data.status")
+    monkeypatch.setattr(settings, "risk_level_field", "data.risk_level")
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        return httpx.Response(200, request=httpx.Request("GET", url), json={"data": {"status": "yellow"}})
+    def serve(payload):
+        monkeypatch.setattr(httpx, "get", lambda url, params=None, headers=None, timeout=None: httpx.Response(
+            200, request=httpx.Request("GET", url), json=payload))
+        outbound.clear_cache()
+        return risk.get_risk(-6.9, 107.6)
 
-    monkeypatch.setattr(httpx, "get", fake_get)
-    outbound.clear_cache()
-    out = risk.get_risk(-6.9, 107.6)
-    assert out["tingkat"] == "Waspada"
+    out = serve({"data": {"risk_level": "caution"}, "meta": {"stale": False}})
+    assert out["risk_level"] == "caution" and out["stale"] is False and out["source"] == "kotasiaga"
+    # nilai di luar kontrak ditolak, tidak ditebak
+    out = serve({"data": {"risk_level": "yellow"}})
+    assert out["risk_level"] is None and "tidak dikenali" in out["message"]
+    # stale dari sumber diteruskan
+    assert serve({"data": {"risk_level": "danger"}, "meta": {"stale": True}})["stale"] is True
+    # sumber mati dan tanpa cache
     monkeypatch.setattr(httpx, "get", lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("mati")))
     outbound.clear_cache()
-    assert risk.get_risk(-6.9, 107.6)["tingkat"] is None
+    out = risk.get_risk(-6.9, 107.6)
+    assert out["risk_level"] is None and "tidak dapat dihubungi" in out["message"]
 
 
 def test_route(client, monkeypatch):
@@ -202,7 +211,9 @@ def test_route(client, monkeypatch):
 
     monkeypatch.setattr(httpx, "get", fake_get)
     r = client.get(f"/destinations/{d['id']}/route?from_lat=-6.9&from_lon=107.6")
-    assert r.status_code == 200 and r.json()["jarak_km"] == 12.35 and r.json()["durasi_menit"] == 25
+    data = r.json()["data"]
+    assert r.status_code == 200 and data["distance_m"] == 12345 and data["duration_s"] == 1500
+    assert data["mode"] == "driving" and r.json()["meta"]["stale"] is False
     assert client.get(f"/destinations/{d['id']}/route").status_code == 422
     monkeypatch.setattr(httpx, "get", lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("mati")))
     assert client.get(f"/destinations/{d['id']}/route?from_lat=1&from_lon=2").status_code == 503
@@ -239,3 +250,11 @@ def test_feed_requires_api_key_and_hides_private_data(client):
 def test_admin_publishes_directly(client):
     r = client.post("/destinations", json={**DEST, "name": "Langsung Terbit Admin"}, headers=ADMIN)
     assert r.status_code == 201 and r.json()["status"] == "terbit" and r.json()["hidden_gem"] is True
+
+def test_meta_seq_increases_on_data_change(client, monkeypatch):
+    d = make_published(client, name="Bukit Uji Seq")
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("mati")))
+    s1 = client.get(f"/destinations/{d['id']}/conditions").json()["meta"]["seq"]
+    assert client.get(f"/destinations/{d['id']}/conditions").json()["meta"]["seq"] == s1  # tanpa perubahan, seq tetap
+    make_published(client, name="Bukit Uji Seq Dua")
+    assert client.get(f"/destinations/{d['id']}/conditions").json()["meta"]["seq"] > s1

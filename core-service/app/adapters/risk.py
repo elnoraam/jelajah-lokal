@@ -1,28 +1,14 @@
-"""Anti-corruption layer untuk sumber status risiko wilayah.
+"""Anti-corruption layer untuk sumber status risiko wilayah (KotaSiaga).
 
-Sumber luar boleh memakai istilah apa saja; adapter menerjemahkannya menjadi
-tiga nilai milik JelajahLokal: Aman, Waspada, Bahaya. Alamat, kunci, dan nama
-field dikonfigurasi lewat environment sehingga sumber dapat diganti tanpa
-mengubah kode konteks lain.
+Data dari sumber luar divalidasi terhadap kontrak: hanya safe, caution, dan danger yang
+diterima, field lain dibuang. Alamat, kunci, dan nama field dikonfigurasi lewat environment
+sehingga sumber dapat diganti tanpa mengubah kode konteks lain.
 """
-from typing import Optional
-
 from ..config import settings
 from .http import UpstreamError, cached_get_json
 
-ALIASES = {
-    "aman": "Aman", "safe": "Aman", "low": "Aman", "hijau": "Aman", "green": "Aman", "normal": "Aman",
-    "waspada": "Waspada", "warning": "Waspada", "medium": "Waspada", "kuning": "Waspada", "yellow": "Waspada",
-    "siaga": "Waspada",
-    "bahaya": "Bahaya", "danger": "Bahaya", "high": "Bahaya", "merah": "Bahaya", "red": "Bahaya",
-    "awas": "Bahaya",
-}
-
-
-def translate(raw) -> Optional[str]:
-    if raw is None:
-        return None
-    return ALIASES.get(str(raw).strip().lower())
+RISK_LEVELS = {"safe", "caution", "danger"}
+SOURCE = "kotasiaga"
 
 
 def _dig(obj, field: str):
@@ -34,20 +20,22 @@ def _dig(obj, field: str):
     return obj
 
 
+def _result(level, message, stale: bool, source=SOURCE) -> dict:
+    return {"risk_level": level, "message": message, "source": source, "stale": stale}
+
+
 def get_risk(lat: float, lon: float) -> dict:
     if not settings.risk_url:
-        return {"tingkat": None, "keterangan": "Sumber status risiko belum dikonfigurasi", "sumber": None,
-                "dari_cache": False}
+        return _result(None, "Data risiko belum tersedia (sumber belum dikonfigurasi)", False, source=None)
     headers = {settings.risk_key_header: settings.risk_key} if settings.risk_key else {}
     params = {settings.risk_lat_param: round(lat, 4), settings.risk_lon_param: round(lon, 4)}
     try:
-        data, cached, _ = cached_get_json(f"risk:{params}", settings.risk_url, settings.risk_ttl,
-                                          params=params, headers=headers)
+        data, stale, _ = cached_get_json(f"risk:{params}", settings.risk_url, settings.risk_ttl,
+                                         params=params, headers=headers, service=SOURCE)
     except UpstreamError:
-        return {"tingkat": None, "keterangan": "Sumber status risiko tidak dapat dihubungi", "sumber": "eksternal",
-                "dari_cache": False}
-    level = translate(_dig(data, settings.risk_level_field))
-    if level is None:
-        return {"tingkat": None, "keterangan": "Format status risiko dari sumber tidak dikenali",
-                "sumber": "eksternal", "dari_cache": cached}
-    return {"tingkat": level, "keterangan": None, "sumber": "eksternal", "dari_cache": cached}
+        return _result(None, "Data risiko belum tersedia (sumber tidak dapat dihubungi)", False)
+    stale = stale or _dig(data, "meta.stale") is True
+    level = _dig(data, settings.risk_level_field)
+    if not (isinstance(level, str) and level in RISK_LEVELS):
+        return _result(None, "Format data risiko dari sumber tidak dikenali", stale)
+    return _result(level, None, stale)

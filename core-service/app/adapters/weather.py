@@ -14,7 +14,7 @@ WMO = {0: "Cerah", 1: "Cerah berawan", 2: "Berawan sebagian", 3: "Berawan", 45: 
 
 
 def _iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds")
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def get_weather(lat: float, lon: float, date: Optional[str] = None) -> dict:
@@ -25,17 +25,17 @@ def get_weather(lat: float, lon: float, date: Optional[str] = None) -> dict:
     else:
         params["current"] = "temperature_2m,rain,weather_code"
     key = f"weather:{params['latitude']}:{params['longitude']}:{date or 'now'}"
-    data, cached, at = cached_get_json(key, URL, settings.weather_ttl, params=params)
+    data, stale, at = cached_get_json(key, URL, settings.weather_ttl, params=params, service="open-meteo")
     if date:
         d = data.get("daily", {})
         code = (d.get("weather_code") or [None])[0]
-        out = {"tanggal": date, "suhu_maks_c": (d.get("temperature_2m_max") or [None])[0],
-               "suhu_min_c": (d.get("temperature_2m_min") or [None])[0],
-               "hujan_mm": (d.get("precipitation_sum") or [None])[0]}
+        out = {"date": date, "temperature_max_c": (d.get("temperature_2m_max") or [None])[0],
+               "temperature_min_c": (d.get("temperature_2m_min") or [None])[0],
+               "rain_mm": (d.get("precipitation_sum") or [None])[0]}
     else:
         c = data.get("current", {})
         code = c.get("weather_code")
-        out = {"suhu_c": c.get("temperature_2m"), "hujan_mm": c.get("rain")}
-    out.update(kode_cuaca=code, deskripsi=WMO.get(code, "Tidak diketahui") if code is not None else None,
-               sumber="open-meteo", diambil_pada=_iso(at), dari_cache=cached)
+        out = {"temperature_c": c.get("temperature_2m"), "rain_mm": c.get("rain")}
+    out.update(weather_code=code, description=WMO.get(code, "Tidak diketahui") if code is not None else None,
+               source="open-meteo", fetched_at=_iso(at), stale=stale)
     return out

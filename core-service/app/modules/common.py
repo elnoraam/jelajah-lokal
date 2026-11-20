@@ -1,8 +1,11 @@
 import math
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException
 
+from ..config import settings
+from ..meta import current_seq
 from ..security import User
 
 
@@ -28,3 +31,14 @@ def get_published_destination(conn, destination_id: int):
 
 def can_see_unpublished(user: Optional[User], owner_id: int) -> bool:
     return bool(user and (user.role == "admin" or user.id == owner_id))
+
+
+def now_z() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def ok(conn, data, stale: bool = False) -> dict:
+    """Envelope sukses standar: {"data": ..., "meta": {seq, updated_at, source, stale}}."""
+    return {"data": data,
+            "meta": {"seq": current_seq(conn), "updated_at": now_z(),
+                     "source": "mock" if settings.mock_mode else "live", "stale": bool(stale)}}
