@@ -28,6 +28,9 @@ JWT_TTL = int(os.getenv("JWT_TTL_SECONDS", "43200"))
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "ganti-token-internal")
 DB_PATH = os.getenv("AUTH_DB_PATH", "/data/auth.db")
 ITERATIONS = 200_000
+# Peran di API dan JWT memakai English lowercase; nilai di database tetap.
+ROLE_API = {"wisatawan": "tourist", "kontributor": "contributor", "admin": "admin"}
+ROLE_DB = {v: k for k, v in ROLE_API.items()}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 SCHEMA = """
@@ -124,7 +127,7 @@ def make_token(user: sqlite3.Row) -> str:
     now = int(time.time())
     payload = {
         "sub": str(user["id"]),
-        "role": user["role"],
+        "role": ROLE_API[user["role"]],
         "name": user["name"],
         "iat": now,
         "exp": now + JWT_TTL
@@ -243,7 +246,7 @@ class RegisterIn(BaseModel):
     email: str = Field(max_length=120)
     password: str = Field(min_length=8, max_length=100)
     name: str = Field(min_length=2, max_length=80)
-    role: str = Field(default="wisatawan", pattern="^(wisatawan|kontributor)$")
+    role: str = Field(default="tourist", pattern="^(tourist|contributor)$")
 
 
 class LoginIn(BaseModel):
@@ -261,10 +264,10 @@ class VerifyIn(BaseModel):
 
 def user_out(u):
     return {
-        "id": u["id"],
+        "id": str(u["id"]),
         "email": u["email"],
         "name": u["name"],
-        "role": u["role"]
+        "role": ROLE_API[u["role"]]
     }
 
 
@@ -296,7 +299,7 @@ def health(conn=Depends(get_conn)):
     "/register",
     status_code=201,
     tags=["akun"],
-    summary="Daftar akun wisatawan atau kontributor"
+    summary="Daftar akun tourist atau contributor"
 )
 def register(body: RegisterIn, conn=Depends(get_conn)):
     email = body.email.strip().lower()
@@ -311,7 +314,7 @@ def register(body: RegisterIn, conn=Depends(get_conn)):
 
     cur = conn.execute(
         "INSERT INTO users(email,name,role,password_hash) VALUES (?,?,?,?)",
-        (email, body.name.strip(), body.role, hash_password(body.password))
+        (email, body.name.strip(), ROLE_DB[body.role], hash_password(body.password))
     )
 
     bump_seq(conn)

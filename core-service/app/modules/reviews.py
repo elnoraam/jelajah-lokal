@@ -22,7 +22,7 @@ class ModerationIn(BaseModel):
 
 
 def review_out(r, with_flags=False) -> dict:
-    out = {"id": r["id"], "destination_id": r["destination_id"], "user_name": r["user_name"],
+    out = {"id": str(r["id"]), "destination_id": str(r["destination_id"]), "user_name": r["user_name"],
            "rating": r["rating"], "comment": r["comment"], "created_at": to_iso_z(r["created_at"])}
     if with_flags:
         out.update(reported=bool(r["reported"]), hidden=bool(r["hidden"]))
@@ -59,7 +59,7 @@ def report_review(review_id: int, _: User = Depends(current_user), conn=Depends(
     conn.commit()
     if cur.rowcount == 0:
         raise HTTPException(404, "Ulasan tidak ditemukan")
-    return ok(conn, {"id": review_id, "reported": True})
+    return ok(conn, {"id": str(review_id), "reported": True})
 
 
 @router.get("/reviews/reported", summary="Ulasan yang dilaporkan (admin)")

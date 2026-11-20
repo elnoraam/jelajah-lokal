@@ -7,19 +7,19 @@ from pydantic import BaseModel, Field
 
 from ..db import get_conn
 from ..security import User, current_user
-from .common import get_published_destination, ok, to_iso_z
+from .common import get_published_destination, ok, parse_id, to_iso_z
 
 router = APIRouter(tags=["rencana-kunjungan"])
 
 
 class PlanIn(BaseModel):
-    destination_id: int
+    destination_id: str
     visit_date: date
     note: Optional[str] = Field(default=None, max_length=300)
 
 
 def plan_out(r) -> dict:
-    return {"id": r["id"], "destination_id": r["destination_id"], "destination_name": r["name"],
+    return {"id": str(r["id"]), "destination_id": str(r["destination_id"]), "destination_name": r["name"],
             "visit_date": r["visit_date"], "note": r["note"], "created_at": to_iso_z(r["created_at"])}
 
 
@@ -33,16 +33,16 @@ def list_plans(user: User = Depends(current_user), conn=Depends(get_conn)):
 
 @router.post("/plans", status_code=201, summary="Simpan destinasi dan tanggal kunjungan")
 def create_plan(body: PlanIn, user: User = Depends(current_user), conn=Depends(get_conn)):
-    get_published_destination(conn, body.destination_id)
+    dest_id = parse_id(body.destination_id)
+    get_published_destination(conn, dest_id)
     if body.visit_date < date.today():
         raise HTTPException(422, "Tanggal kunjungan tidak boleh di masa lalu")
     cur = conn.execute("INSERT INTO plans(user_id,destination_id,visit_date,note) VALUES (?,?,?,?)",
-                       (user.id, body.destination_id, body.visit_date.isoformat(), body.note))
+                       (user.id, dest_id, body.visit_date.isoformat(), body.note))
     conn.commit()
     row = conn.execute("SELECT p.*, d.name FROM plans p JOIN destinations d ON d.id = p.destination_id WHERE p.id=?",
                        (cur.lastrowid,)).fetchone()
     return ok(conn, plan_out(row))
-
 
 @router.delete("/plans/{plan_id}", summary="Hapus rencana kunjungan")
 def delete_plan(plan_id: int, user: User = Depends(current_user), conn=Depends(get_conn)):
@@ -50,4 +50,4 @@ def delete_plan(plan_id: int, user: User = Depends(current_user), conn=Depends(g
     conn.commit()
     if cur.rowcount == 0:
         raise HTTPException(404, "Rencana tidak ditemukan")
-    return ok(conn, {"id": plan_id, "deleted": True})
+    return ok(conn, {"id": str(plan_id), "deleted": True})

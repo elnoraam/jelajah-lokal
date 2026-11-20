@@ -37,4 +37,10 @@ class Settings:
 
 
 settings = Settings()
-CATEGORIES = ("alam", "budaya-sejarah", "kuliner-lokal", "desa-wisata", "kerajinan")
+CATEGORIES = ("alam", "budaya-sejarah", "kuliner-lokal", "desa-wisata", "kerajinan")  # nilai internal (database)
+# Nilai di API memakai English lowercase. Pemetaan hanya di lapisan API.
+CATEGORY_API = {"alam": "nature", "budaya-sejarah": "culture_history", "kuliner-lokal": "local_culinary",
+                "desa-wisata": "tourism_village", "kerajinan": "craft"}
+CATEGORY_INTERNAL = {v: k for k, v in CATEGORY_API.items()}
+STATUS_API = {"menunggu": "waiting", "terbit": "published", "ditolak": "rejected"}
+STATUS_INTERNAL = {v: k for k, v in STATUS_API.items()}

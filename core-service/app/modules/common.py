@@ -33,6 +33,14 @@ def can_see_unpublished(user: Optional[User], owner_id: int) -> bool:
     return bool(user and (user.role == "admin" or user.id == owner_id))
 
 
+def parse_id(value) -> int:
+    """ID di API berupa string buram; di database berupa integer. ID yang bukan angka tidak ditemukan."""
+    try:
+        return int(str(value))
+    except ValueError:
+        raise HTTPException(404, "Data tidak ditemukan")
+    
+
 def to_iso_z(sqlite_ts: str) -> str:
     """'YYYY-MM-DD HH:MM:SS' (UTC dari SQLite) -> 'YYYY-MM-DDTHH:MM:SSZ'."""
     return sqlite_ts.replace(" ", "T") + "Z"

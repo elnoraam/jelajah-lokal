@@ -4,20 +4,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..config import CATEGORY_API
 from ..db import get_conn
 from ..security import api_key_required
 from .common import ok, to_iso_z
 
 router = APIRouter(tags=["umpan-destinasi"])
-
-# Nilai category untuk layanan lain memakai English. Slug internal tetap Indonesia.
-CATEGORY_API = {
-    "alam": "nature",
-    "budaya-sejarah": "culture_history",
-    "kuliner-lokal": "local_culinary",
-    "desa-wisata": "tourism_village",
-    "kerajinan": "craft",
-}
 
 
 def _parse_since(value: str) -> str:

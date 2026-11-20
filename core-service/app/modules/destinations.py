@@ -5,18 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .. import events
-from ..config import CATEGORIES
+from ..config import CATEGORIES, CATEGORY_API, CATEGORY_INTERNAL, STATUS_API, STATUS_INTERNAL
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
 from .common import can_see_unpublished, haversine_km, ok, slice_of, to_iso_z
 
 router = APIRouter(tags=["katalog-destinasi"])
-CAT_PATTERN = "^(" + "|".join(CATEGORIES) + ")$"
+CAT_PATTERN = "^(" + "|".join(CATEGORY_API.values()) + ")$"
 
 
 class DestinationIn(BaseModel):
     name: str = Field(min_length=3, max_length=120)
-    category: str = Field(pattern=CAT_PATTERN, description="alam | budaya-sejarah | kuliner-lokal | desa-wisata | kerajinan")
+    category: str = Field(pattern=CAT_PATTERN, description="nature | culture_history | local_culinary | tourism_village | craft")
     description: str = Field(min_length=20, max_length=4000)
     lat: float = Field(ge=-11.5, le=6.5)
     lon: float = Field(ge=94.0, le=141.5)
@@ -27,17 +27,20 @@ class DestinationIn(BaseModel):
 
 
 class StatusIn(BaseModel):
-    status: str = Field(pattern="^(terbit|ditolak)$")
+    status: str = Field(pattern="^(published|rejected)$")
     reason: Optional[str] = Field(default=None, max_length=300)
 
 
 def dest_out(r) -> dict:
     d = dict(r)
+    d["id"] = str(d["id"])
+    d["category"] = CATEGORY_API[d["category"]]
+    d["status"] = STATUS_API[d["status"]]
     d["hidden_gem"] = bool(d["hidden_gem"])
     d["lat"], d["lon"] = d.pop("latitude"), d.pop("longitude")
     d["created_at"], d["updated_at"] = to_iso_z(d["created_at"]), to_iso_z(d["updated_at"])
     d.pop("submitted_by", None)
-    d.pop("reject_reason", None) if d["status"] != "ditolak" else None
+    d.pop("reject_reason", None) if d["status"] != "rejected" else None
     return d
 
 
@@ -49,7 +52,7 @@ def search_destinations(
     lat: Optional[float] = Query(default=None, ge=-90, le=90),
     lon: Optional[float] = Query(default=None, ge=-180, le=180),
     radius_m: Optional[float] = Query(default=None, gt=0, le=500000),
-    status: Optional[str] = Query(default=None, pattern="^(menunggu|terbit|ditolak)$", description="Hanya berlaku untuk admin"),
+    status: Optional[str] = Query(default=None, pattern="^(waiting|published|rejected)$", description="Hanya berlaku untuk admin"),
     mine: bool = Query(default=False, description="true = kiriman saya (perlu login)"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -68,7 +71,7 @@ def search_destinations(
         args.append(user.id)
     elif status and user and user.role == "admin":
         where.append("status=?")
-        args.append(status)
+        args.append(STATUS_INTERNAL[status])
     else:
         where.append("status='terbit'")
     if q:
@@ -77,7 +80,7 @@ def search_destinations(
         args += [like, like, like]
     if category:
         where.append("category=?")
-        args.append(category)
+        args.append(CATEGORY_INTERNAL[category])
     if hidden is not None:
         where.append("hidden_gem=?")
         args.append(1 if hidden else 0)
@@ -104,14 +107,14 @@ def get_destination(destination_id: int, user: Optional[User] = Depends(optional
     return ok(conn, dest_out(row))
 
 
-@router.post("/destinations", status_code=201, summary="Kirim destinasi baru (kontributor)")
-def create_destination(body: DestinationIn, user: User = Depends(require_roles("kontributor", "admin")),
+@router.post("/destinations", status_code=201, summary="Kirim destinasi baru (contributor)")
+def create_destination(body: DestinationIn, user: User = Depends(require_roles("contributor", "admin")),
                        conn=Depends(get_conn)):
     status = "terbit" if user.role == "admin" else "menunggu"
     cur = conn.execute(
         """INSERT INTO destinations(name,category,description,latitude,longitude,address,opening_hours,
            photo_url,wikipedia_title,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (body.name.strip(), body.category, body.description.strip(), body.lat, body.lon, body.address,
+        (body.name.strip(), CATEGORY_INTERNAL[body.category], body.description.strip(), body.lat, body.lon, body.address,
          body.opening_hours, body.photo_url, body.wikipedia_title, status, user.id))
     new_id = cur.lastrowid
     if status == "terbit":
@@ -127,12 +130,12 @@ def set_destination_status(destination_id: int, body: StatusIn, _: User = Depend
     if not row:
         raise HTTPException(404, "Destinasi tidak ditemukan")
     if row["status"] != "menunggu":
-        raise HTTPException(409, f"Destinasi sudah berstatus {row['status']}")
-    if body.status == "ditolak" and not body.reason:
+        raise HTTPException(409, f"Destinasi sudah berstatus {STATUS_API[row['status']]}")
+    if body.status == "rejected" and not body.reason:
         raise HTTPException(422, "Alasan penolakan wajib diisi")
     conn.execute("UPDATE destinations SET status=?, reject_reason=?, updated_at=datetime('now') WHERE id=?",
-                 (body.status, body.reason, destination_id))
-    if body.status == "terbit":
+                 (STATUS_INTERNAL[body.status], body.reason, destination_id))
+    if body.status == "published":
         events.publish("DestinasiTerbit", conn, destination_id=destination_id)
     conn.commit()
     return dest_out(conn.execute("SELECT * FROM destinations WHERE id=?", (destination_id,)).fetchone())
