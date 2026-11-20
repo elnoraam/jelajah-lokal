@@ -37,7 +37,7 @@ def isolate(monkeypatch):
 
 
 ADMIN = token(1, "admin", "Admin")
-KONTRIBUTOR = token(2, "kontributor", "Kontri")
-WISATAWAN = token(3, "wisatawan", "Wisata")
-WISATAWAN2 = token(4, "wisatawan", "Wisata Dua")
-WISATAWAN3 = token(5, "wisatawan", "Wisata Tiga")
+KONTRIBUTOR = token(2, "contributor", "Kontri")
+WISATAWAN = token(3, "tourist", "Wisata")
+WISATAWAN2 = token(4, "tourist", "Wisata Dua")
+WISATAWAN3 = token(5, "tourist", "Wisata Tiga")

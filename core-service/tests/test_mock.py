@@ -106,3 +106,15 @@ def test_mock_scenario_endpoint_needs_admin(mock_env):
         assert r.json()["meta"]["source"] == "mock"
         assert c.post("/_mock/scenario", json={"name": "tidak_ada"}, headers=ADMIN).status_code == 422
         assert c.get("/_mock/state", headers=ADMIN).json()["data"]["seed"] == 123
+
+
+def test_mock_scenario_accepts_admin_api_key(mock_env, monkeypatch):
+    monkeypatch.setattr(settings, "mock_admin_key", "kunci-admin-uji")
+    app = FastAPI()
+    app.include_router(mock_api.router)
+    with TestClient(app) as c:
+        body = {"name": "rain_storm"}
+        assert c.post("/_mock/scenario", json=body, headers={"X-API-Key": "salah"}).status_code == 401
+        r = c.post("/_mock/scenario", json=body, headers={"X-API-Key": "kunci-admin-uji"})
+        assert r.status_code == 200 and r.json()["data"]["storm_active"] is True
+        assert c.get("/_mock/state", headers={"X-API-Key": "kunci-admin-uji"}).status_code == 200

@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="JelajahLokal Auth Service",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
     description="Login pengguna (JWT) dan pengelolaan API key. "
                 "Semua path relatif terhadap /api/auth."

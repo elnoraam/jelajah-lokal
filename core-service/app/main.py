@@ -48,7 +48,7 @@ Layanan wisata tersembunyi dan cerita budaya. Semua path relatif terhadap `/api`
 - Data publik (pencarian, cerita, kondisi) terbuka tanpa autentikasi, tetapi dibatasi jumlah pemanggilannya.
 """
 
-app = FastAPI(title="JelajahLokal Core Service", version="1.0.0", description=DESCRIPTION, lifespan=lifespan)
+app = FastAPI(title="JelajahLokal Core Service", version="2.0.0", description=DESCRIPTION, lifespan=lifespan)
 
 # Kode error mengikuti "unauthorized" (401 token JWT) dan "conflict" (409)
 # sementara, menunggu persetujuan grup Smart City.
