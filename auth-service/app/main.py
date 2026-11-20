@@ -11,11 +11,16 @@ import re
 import secrets
 import sqlite3
 import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
 import jwt
-from fastapi import Depends, FastAPI, Header, HTTPException
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
 
 JWT_SECRET = os.getenv("JWT_SECRET", "ganti-di-env-minimal-32-karakter!!")
@@ -121,6 +126,29 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="JelajahLokal Auth Service", version="1.0.0", lifespan=lifespan,
               description="Login pengguna (JWT) dan pengelolaan API key. Semua path relatif terhadap /api/auth.")
+STATUS_CODE = {403: "forbidden", 404: "not_found", 409: "conflict", 422: "validation_error",
+               429: "rate_limited", 503: "upstream_unavailable"}
+
+
+def error_response(request: Request, status: int, code: str, message: str) -> JSONResponse:
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    return JSONResponse({"error": {"code": code, "message": message, "request_id": request_id}},
+                        status_code=status)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 401:
+        code = "invalid_api_key" if "/internal/verify-key" in request.url.path else "unauthorized"
+    else:
+        code = STATUS_CODE.get(exc.status_code, "error")
+    return error_response(request, exc.status_code, code, str(exc.detail))
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    message = "; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()[:5])
+    return error_response(request, 422, "validation_error", message or "Input tidak valid")
 
 
 class RegisterIn(BaseModel):
