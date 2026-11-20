@@ -233,18 +233,30 @@ def test_background_wikipedia(client, monkeypatch):
 
 def test_feed_requires_api_key_and_hides_private_data(client):
     d = make_published(client, name="Sumber Uji Umpan")
-    assert client.get("/feed/destinations").status_code == 401
-    assert client.get("/feed/destinations", headers={"X-API-Key": "salah"}).status_code == 401
-    r = client.get("/feed/destinations?size=200", headers={"X-API-Key": "jl_valid"})
+    h = {"X-API-Key": "jl_valid"}
+    for headers in ({}, {"X-API-Key": "salah"}):
+        r = client.get("/feed/destinations", headers=headers)
+        assert r.status_code == 401 and r.json()["error"]["code"] == "invalid_api_key"
+    r = client.get("/feed/destinations?limit=200", headers=h)
     assert r.status_code == 200
-    item = next(i for i in r.json()["items"] if i["id"] == d["id"])
-    assert set(item) == {"id", "name", "category", "latitude", "longitude", "updated_at"}
+    item = next(i for i in r.json()["data"] if i["id"] == str(d["id"]))
+    assert set(item) == {"id", "name", "category", "lat", "lon", "updated_at"}
+    assert item["category"] == "nature" and item["lat"] == -6.80 and item["lon"] == 107.60
+    assert item["updated_at"].endswith("Z")
+    assert {"seq", "updated_at", "source", "stale", "total"} <= set(r.json()["meta"])
     # data yang belum terbit tidak ikut
     pending = client.post("/destinations", json={**DEST, "name": "Belum Terbit Uji"}, headers=KONTRIBUTOR).json()
-    ids = [i["id"] for i in client.get("/feed/destinations?size=200", headers={"X-API-Key": "jl_valid"}).json()["items"]]
-    assert pending["id"] not in ids
-    assert client.get("/feed/destinations?updated_since=2999-01-01 00:00:00",
-                      headers={"X-API-Key": "jl_valid"}).json()["total"] == 0
+    ids = [i["id"] for i in client.get("/feed/destinations?limit=200", headers=h).json()["data"]]
+    assert str(pending["id"]) not in ids
+    # paginasi limit/offset
+    page = client.get("/feed/destinations?limit=1&offset=0", headers=h).json()
+    assert len(page["data"]) == 1 and page["meta"]["total"] >= 1
+    assert client.get("/feed/destinations?limit=201", headers=h).status_code == 422
+    # updated_since: ISO 8601 UTC
+    future = client.get("/feed/destinations?updated_since=2999-01-01T00:00:00Z", headers=h).json()
+    assert future["data"] == [] and future["meta"]["total"] == 0
+    bad = client.get("/feed/destinations?updated_since=kemarin", headers=h)
+    assert bad.status_code == 422 and bad.json()["error"]["code"] == "validation_error"
 
 
 def test_admin_publishes_directly(client):
