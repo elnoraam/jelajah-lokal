@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from .. import events
 from ..db import get_conn
 from ..security import User, current_user, require_roles
-from .common import get_published_destination, page_of
+from .common import get_published_destination, ok, page_of
 
 router = APIRouter(tags=["ulasan"])
 
@@ -35,9 +35,10 @@ def list_reviews(destination_id: int, page: int = Query(default=1, ge=1), size: 
     dest = get_published_destination(conn, destination_id)
     rows = conn.execute("SELECT * FROM reviews WHERE destination_id=? AND hidden=0 ORDER BY created_at DESC, id DESC",
                         (destination_id,)).fetchall()
-    result = page_of([review_out(r) for r in rows], page, size)
-    result.update(rating_avg=dest["rating_avg"], review_count=dest["review_count"])
-    return result
+    chunk, total = page_of([review_out(r) for r in rows], page, size)
+    resp = ok(conn, chunk, total=total)
+    resp["meta"].update(rating_avg=dest["rating_avg"], review_count=dest["review_count"])
+    return resp
 
 
 @router.post("/destinations/{destination_id}/reviews", status_code=201, summary="Tulis ulasan (login)")
@@ -49,7 +50,7 @@ def create_review(destination_id: int, body: ReviewIn, user: User = Depends(curr
                        (destination_id, user.id, user.name or "Pengguna", body.rating, body.comment))
     events.publish("UlasanDitambahkan", conn, destination_id=destination_id, review_id=cur.lastrowid)
     conn.commit()
-    return review_out(conn.execute("SELECT * FROM reviews WHERE id=?", (cur.lastrowid,)).fetchone())
+    return ok(conn, review_out(conn.execute("SELECT * FROM reviews WHERE id=?", (cur.lastrowid,)).fetchone()))
 
 
 @router.post("/reviews/{review_id}/report", summary="Laporkan ulasan untuk ditinjau (login)")
@@ -58,14 +59,15 @@ def report_review(review_id: int, _: User = Depends(current_user), conn=Depends(
     conn.commit()
     if cur.rowcount == 0:
         raise HTTPException(404, "Ulasan tidak ditemukan")
-    return {"id": review_id, "reported": True}
+    return ok(conn, {"id": review_id, "reported": True})
 
 
 @router.get("/reviews/reported", summary="Ulasan yang dilaporkan (admin)")
 def list_reported(page: int = Query(default=1, ge=1), size: int = Query(default=10, ge=1, le=50),
                   _: User = Depends(require_roles("admin")), conn=Depends(get_conn)):
     rows = conn.execute("SELECT * FROM reviews WHERE reported=1 ORDER BY id DESC").fetchall()
-    return page_of([review_out(r, True) for r in rows], page, size)
+    chunk, total = page_of([review_out(r, True) for r in rows], page, size)
+    return ok(conn, chunk, total=total)
 
 
 @router.patch("/reviews/{review_id}/moderation", summary="Sembunyikan atau tampilkan ulasan (admin)")
@@ -77,4 +79,4 @@ def moderate_review(review_id: int, body: ModerationIn, _: User = Depends(requir
     conn.execute("UPDATE reviews SET hidden=?, reported=0 WHERE id=?", (1 if body.hidden else 0, review_id))
     events.publish("UlasanDimoderasi", conn, destination_id=row["destination_id"], review_id=review_id)
     conn.commit()
-    return review_out(conn.execute("SELECT * FROM reviews WHERE id=?", (review_id,)).fetchone(), True)
+    return ok(conn, review_out(conn.execute("SELECT * FROM reviews WHERE id=?", (review_id,)).fetchone(), True))

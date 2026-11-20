@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from ..db import get_conn
 from ..security import User, current_user
-from .common import get_published_destination
+from .common import get_published_destination, ok
 
 router = APIRouter(tags=["rencana-kunjungan"])
 
@@ -28,7 +28,7 @@ def list_plans(user: User = Depends(current_user), conn=Depends(get_conn)):
     rows = conn.execute(
         """SELECT p.*, d.name FROM plans p JOIN destinations d ON d.id = p.destination_id
            WHERE p.user_id=? ORDER BY p.visit_date, p.id""", (user.id,)).fetchall()
-    return [plan_out(r) for r in rows]
+    return ok(conn, [plan_out(r) for r in rows], total=len(rows))
 
 
 @router.post("/plans", status_code=201, summary="Simpan destinasi dan tanggal kunjungan")
@@ -41,7 +41,7 @@ def create_plan(body: PlanIn, user: User = Depends(current_user), conn=Depends(g
     conn.commit()
     row = conn.execute("SELECT p.*, d.name FROM plans p JOIN destinations d ON d.id = p.destination_id WHERE p.id=?",
                        (cur.lastrowid,)).fetchone()
-    return plan_out(row)
+    return ok(conn, plan_out(row))
 
 
 @router.delete("/plans/{plan_id}", summary="Hapus rencana kunjungan")
@@ -50,4 +50,4 @@ def delete_plan(plan_id: int, user: User = Depends(current_user), conn=Depends(g
     conn.commit()
     if cur.rowcount == 0:
         raise HTTPException(404, "Rencana tidak ditemukan")
-    return {"id": plan_id, "deleted": True}
+    return ok(conn, {"id": plan_id, "deleted": True})

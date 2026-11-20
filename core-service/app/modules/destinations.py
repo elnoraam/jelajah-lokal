@@ -8,7 +8,7 @@ from .. import events
 from ..config import CATEGORIES
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
-from .common import can_see_unpublished, haversine_km, page_of
+from .common import can_see_unpublished, haversine_km, ok, page_of
 
 router = APIRouter(tags=["katalog-destinasi"])
 CAT_PATTERN = "^(" + "|".join(CATEGORIES) + ")$"
@@ -90,7 +90,8 @@ def search_destinations(
         items.append(r)
     if lat is not None:
         items.sort(key=lambda r: r["jarak_km"])
-    return page_of([dest_out(r) for r in items], page, size)
+    chunk, total = page_of([dest_out(r) for r in items], page, size)
+    return ok(conn, chunk, total=total)
 
 
 @router.get("/destinations/{destination_id}", summary="Detail destinasi")
@@ -98,7 +99,7 @@ def get_destination(destination_id: int, user: Optional[User] = Depends(optional
     row = conn.execute("SELECT * FROM destinations WHERE id=?", (destination_id,)).fetchone()
     if not row or (row["status"] != "terbit" and not can_see_unpublished(user, row["submitted_by"])):
         raise HTTPException(404, "Destinasi tidak ditemukan")
-    return dest_out(row)
+    return ok(conn, dest_out(row))
 
 
 @router.post("/destinations", status_code=201, summary="Kirim destinasi baru (kontributor)")
@@ -114,7 +115,7 @@ def create_destination(body: DestinationIn, user: User = Depends(require_roles("
     if status == "terbit":
         events.publish("DestinasiTerbit", conn, destination_id=new_id)
     conn.commit()
-    return dest_out(conn.execute("SELECT * FROM destinations WHERE id=?", (new_id,)).fetchone())
+    return ok(conn, dest_out(conn.execute("SELECT * FROM destinations WHERE id=?", (new_id,)).fetchone()))
 
 
 @router.patch("/destinations/{destination_id}/status", summary="Terbitkan atau tolak destinasi (admin)")

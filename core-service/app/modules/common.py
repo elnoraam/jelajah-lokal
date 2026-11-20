@@ -17,9 +17,10 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def page_of(items: list, page: int, size: int) -> dict:
+def page_of(items: list, page: int, size: int) -> tuple:
+    """Return (potongan_halaman, total)."""
     start = (page - 1) * size
-    return {"items": items[start:start + size], "page": page, "size": size, "total": len(items)}
+    return items[start:start + size], len(items)
 
 
 def get_published_destination(conn, destination_id: int):
@@ -37,8 +38,12 @@ def now_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def ok(conn, data, stale: bool = False) -> dict:
-    """Envelope sukses standar: {"data": ..., "meta": {seq, updated_at, source, stale}}."""
-    return {"data": data,
+def ok(conn, data, stale: bool = False, total: Optional[int] = None) -> dict:
+    """Envelope sukses standar: {"data": ..., "meta": {seq, updated_at, source, stale}}.
+    Untuk daftar, total seluruh hasil diisi di meta.total."""
+    resp = {"data": data,
             "meta": {"seq": current_seq(conn), "updated_at": now_z(),
                      "source": "mock" if settings.mock_mode else "live", "stale": bool(stale)}}
+    if total is not None:
+        resp["meta"]["total"] = total
+    return resp

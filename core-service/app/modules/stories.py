@@ -9,7 +9,7 @@ from ..adapters.http import UpstreamError
 from ..adapters.wiki import get_background
 from ..db import get_conn
 from ..security import User, optional_user, require_roles
-from .common import can_see_unpublished, get_published_destination, page_of
+from .common import can_see_unpublished, get_published_destination, ok, page_of
 
 router = APIRouter(tags=["cerita-budaya"])
 SUMMARY_CHARS = 280
@@ -55,7 +55,8 @@ def list_destination_stories(destination_id: int, page: int = Query(default=1, g
         """SELECT s.* FROM stories s JOIN story_destinations sd ON sd.story_id = s.id
            WHERE sd.destination_id=? AND s.status='terbit' ORDER BY s.created_at DESC, s.id DESC""",
         (destination_id,)).fetchall()
-    return page_of([story_out(conn, r, "ringkas") for r in rows], page, size)
+    chunk, total = page_of([story_out(conn, r, "ringkas") for r in rows], page, size)
+    return ok(conn, chunk, total=total)
 
 
 @router.get("/destinations/{destination_id}/background", summary="Ringkasan latar sejarah (Wikipedia)")
@@ -64,7 +65,7 @@ def destination_background(destination_id: int, conn=Depends(get_conn)):
     if not dest["wikipedia_title"]:
         raise HTTPException(404, "Destinasi ini belum memiliki rujukan Wikipedia")
     try:
-        return get_background(dest["wikipedia_title"])
+        return ok(conn, get_background(dest["wikipedia_title"]))
     except UpstreamError:
         raise HTTPException(503, "Wikipedia tidak dapat dihubungi dan belum ada data tersimpan")
 
@@ -75,7 +76,8 @@ def list_stories(status: Optional[str] = Query(default=None, pattern="^(menunggu
                  user: Optional[User] = Depends(optional_user), conn=Depends(get_conn)):
     st = status if (user and user.role == "admin" and status) else "terbit"
     rows = conn.execute("SELECT * FROM stories WHERE status=? ORDER BY created_at DESC, id DESC", (st,)).fetchall()
-    return page_of([story_out(conn, r, "ringkas") for r in rows], page, size)
+    chunk, total = page_of([story_out(conn, r, "ringkas") for r in rows], page, size)
+    return ok(conn, chunk, total=total)
 
 
 @router.get("/stories/{story_id}", summary="Isi cerita")
@@ -85,7 +87,7 @@ def get_story(story_id: int, mode: Optional[str] = Query(default=None, pattern="
     row = conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()
     if not row or (row["status"] != "terbit" and not can_see_unpublished(user, row["author_id"])):
         raise HTTPException(404, "Cerita tidak ditemukan")
-    return story_out(conn, row, mode)
+    return ok(conn, story_out(conn, row, mode))
 
 
 @router.post("/stories", status_code=201, summary="Kirim cerita budaya (kontributor)")
@@ -102,7 +104,7 @@ def create_story(body: StoryIn, user: User = Depends(require_roles("kontributor"
     if status == "terbit":
         events.publish("CeritaTerbit", conn, story_id=story_id, destination_ids=ids)
     conn.commit()
-    return story_out(conn, conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone())
+    return ok(conn, story_out(conn, conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()))
 
 
 @router.patch("/stories/{story_id}/status", summary="Terbitkan atau tolak cerita (admin)")
@@ -121,4 +123,4 @@ def set_story_status(story_id: int, body: StatusIn, _: User = Depends(require_ro
             "SELECT destination_id FROM story_destinations WHERE story_id=?", (story_id,))]
         events.publish("CeritaTerbit", conn, story_id=story_id, destination_ids=ids)
     conn.commit()
-    return story_out(conn, conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone())
+    return ok(conn, story_out(conn, conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()))
